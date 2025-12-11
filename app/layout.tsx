@@ -1,10 +1,10 @@
 import './globals.css';
 import type { ReactNode } from 'react';
-import NavBar from '@/components/NavBar';
+import NavBar from '../components/NavBar';
 
 export const metadata = {
   title: '무료 QR 차량 식별 시스템',
-  description: 'Next.js + Supabase + Edge Functions 기반 무료 QR 차량 식별 서비스',
+  description: 'Next.js + Supabase + Edge Functions 로 구현한 무료 QR 차량 식별/관리',
 };
 
 export const dynamic = 'force-dynamic';

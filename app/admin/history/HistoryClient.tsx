@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { supabaseBrowser } from '@/lib/supabase-browser';
+import { useEffect, useState } from 'react';
+import { supabaseBrowser } from '../../../lib/supabase-browser';
 import QRCode from 'qrcode';
 
 type Resident = {
@@ -39,8 +39,8 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
   const [message, setMessage] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
 
-  // 카드 렌더 시 QR 이미지 생성
-  useState(() => {
+  // 토큰이 있는 행에 대해 QR 이미지를 미리 생성
+  useEffect(() => {
     rows.forEach((row) => {
       if (row.token && !qrImages[row.id]) {
         const payload = { v: 1, phone: row.resident?.phone ?? '', token: row.token };
@@ -49,7 +49,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
           .catch(() => {});
       }
     });
-  });
+  }, [rows, qrImages]);
 
   function toLocalInput(value: string | null): string {
     if (!value) return '';
@@ -127,9 +127,9 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
         })
         .eq('id', resident.id);
       if (error) throw error;
-      setMessage('입주민 정보가 저장되었습니다.');
+      setMessage('입주자 정보가 저장되었습니다.');
     } catch (err: any) {
-      setMessage(err.message ?? '입주민 저장 중 오류가 발생했습니다.');
+      setMessage(err.message ?? '저장에 실패했습니다.');
     } finally {
       setSavingResidentId(null);
     }
@@ -150,7 +150,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
       if (error) throw error;
       setMessage('토큰 상태/만료일이 저장되었습니다.');
     } catch (err: any) {
-      setMessage(err?.message ?? '토큰 저장 중 오류가 발생했습니다.');
+      setMessage(err?.message ?? '저장에 실패했습니다.');
     } finally {
       setSavingTokenId(null);
     }
@@ -169,9 +169,9 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
         await supabase.from('qr_tokens').delete().eq('id', tokenId);
         setRows((prev) => prev.filter((r: any) => r.id !== tokenId));
       }
-      setMessage('삭제되었습니다.');
+      setMessage('삭제했습니다.');
     } catch (err: any) {
-      setMessage(err?.message ?? '삭제 중 오류가 발생했습니다.');
+      setMessage(err?.message ?? '삭제에 실패했습니다.');
     } finally {
       setSavingTokenId(null);
     }
@@ -190,7 +190,8 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>입주자 관리</h1>
         <p style={{ color: '#6b7280', margin: '4px 0 0', fontSize: 13 }}>
-          생성된 QR 이력은 유지되며 토큰은 수정 불가입니다. 입주민 정보만 수정 가능하며 필요 시 새 QR을 생성하세요.
+          생성된 QR 이력은 유지되며 토큰은 수정 불가합니다. 입주민 정보만 수정 가능합니다. 새 QR 발급이 필요하면
+          이 카드에서 바로 생성하세요.
         </p>
       </div>
 
@@ -269,7 +270,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
                     }}
                   />
                 ) : (
-                  <span>{row.expiresAt ? formatKST(row.expiresAt) : '없음'}</span>
+                  <span>{row.expiresAt ? formatKST(row.expiresAt) : '미설정'}</span>
                 )}
                 <button
                   onClick={() =>
@@ -342,7 +343,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
                 />
               </div>
             ) : (
-              <div style={{ color: '#b91c1c', fontSize: 13 }}>입주민 정보가 없습니다.</div>
+              <div style={{ color: '#b91c1c', fontSize: 13 }}>입주자 정보를 찾을 수 없습니다.</div>
             )}
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -352,7 +353,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
                 disabled={!row.resident || savingResidentId === row.resident.id}
                 onClick={() => handleSaveResident(row.resident)}
               >
-                {savingResidentId === row.resident?.id ? '입주민 저장 중...' : '입주민 저장'}
+                {savingResidentId === row.resident?.id ? '저장 중...' : '입주자 저장'}
               </button>
               <button
                 className="btn"
@@ -360,7 +361,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
                 disabled={savingTokenId === row.id}
                 onClick={() => handleSaveToken(row)}
               >
-                {savingTokenId === row.id ? '토큰 저장 중...' : '토큰/만료일 저장'}
+                {savingTokenId === row.id ? '저장 중...' : '토큰/만료일 저장'}
               </button>
               <button
                 className="btn"

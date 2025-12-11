@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { supabaseBrowser } from '@/lib/supabase-browser';
+import { supabaseBrowser } from '../lib/supabase-browser';
 
 export default function NavBar() {
   const supabase = supabaseBrowser();

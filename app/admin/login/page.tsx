@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabase-browser';
+import { supabaseBrowser } from '../../../lib/supabase-browser';
 
 export default function AdminLoginPage() {
   const supabase = supabaseBrowser();

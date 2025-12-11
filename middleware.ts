@@ -8,20 +8,20 @@ const PUBLIC_ADMIN_PATHS = ['/admin/login'];
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const supabase = createServerClient(
-    {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    },
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value;
-        },
-        set(name, value, options) {
+        get: (name: string) => req.cookies.get(name)?.value,
+        getAll: () => req.cookies.getAll(),
+        set: (name: string, value: string, options: any) => {
           res.cookies.set(name, value, options);
         },
-        remove(name, options) {
-          res.cookies.delete(name, options);
+        setAll: (cookies: { name: string; value: string; options?: any }[]) => {
+          cookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+        },
+        remove: (name: string, _options: any) => {
+          res.cookies.delete(name);
         },
       },
     }

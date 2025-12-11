@@ -1,4 +1,4 @@
-import { supabaseServer } from '@/lib/supabase-server';
+import { supabaseServer } from '../../../lib/supabase-server';
 import HistoryClient from './HistoryClient';
 
 export default async function HistoryPage() {
@@ -9,12 +9,11 @@ export default async function HistoryPage() {
   if (!session) {
     return (
       <main style={{ padding: '24px 16px', maxWidth: 1280, margin: '0 auto' }}>
-        <h1>로그인이 필요합니다.</h1>
+        <h1>로그인 후 이용해주세요.</h1>
       </main>
     );
   }
 
-  // resident + 최근 QR 토큰 가져오기
   const { data: rows } = await supabase
     .from('resident')
     .select(

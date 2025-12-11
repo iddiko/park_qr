@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
         id: userId,
         name,
         phone,
+        email,
         unit,
         vehicle_plate: vehicle_plate ?? '',
         status: 'pending',

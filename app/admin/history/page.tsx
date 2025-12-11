@@ -20,6 +20,7 @@ export default async function HistoryPage() {
       `
       id,
       name,
+      email,
       phone,
       unit,
       vehicle_plate,

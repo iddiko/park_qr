@@ -120,6 +120,7 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
         .from('resident')
         .update({
           name: resident.name,
+          email: resident.email,
           phone: resident.phone,
           unit: resident.unit,
           vehicle_plate: resident.vehicle_plate,
@@ -315,7 +316,11 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
             {row.resident ? (
               <div style={{ display: 'grid', gap: 10 }}>
                 <Field label="ID" value={row.resident.id ?? ''} readOnly />
-                <Field label="이메일" value={row.resident.email ?? '이메일 조회 중...'} readOnly />
+                <Field
+                  label="이메일"
+                  value={row.resident.email ?? ''}
+                  onChange={(v) => handleResidentChange(row.resident!.id, 'email', v)}
+                />
                 <Field
                   label={`QR 생성: ${formatKST(row.createdAt)}`}
                   value={row.resident.name ?? ''}

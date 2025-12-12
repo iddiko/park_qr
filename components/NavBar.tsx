@@ -42,6 +42,7 @@ export default function NavBar() {
     { href: '/', label: 'Home' },
     { href: '/scan', label: 'Scan' },
   ];
+  const userLinks = [{ href: '/user/dashboard', label: '내 대시보드' }];
   const adminLinks = [
     { href: '/admin/dashboard', label: '관리자 대시보드' },
     { href: '/admin/generate', label: 'QR 생성' },
@@ -50,10 +51,13 @@ export default function NavBar() {
   ];
   const guestLinks = [
     { href: '/resident/register', label: '회원등록' },
-    { href: '/admin/login', label: 'Login' },
+    { href: '/login', label: '로그인' },
+    { href: '/admin/login', label: '관리자' },
   ];
 
-  const linksToShow = sessionEmail ? [...baseLinks, ...(isAdmin ? adminLinks : [])] : [...baseLinks, ...guestLinks];
+  const linksToShow = sessionEmail
+    ? [...baseLinks, ...userLinks, ...(isAdmin ? adminLinks : [])]
+    : [...baseLinks, ...guestLinks];
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

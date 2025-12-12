@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabaseBrowser } from '../../../lib/supabase-browser';
 import QRCode from 'qrcode';
 
@@ -24,8 +25,16 @@ type TokenRow = {
   resident: Resident | null;
 };
 
-export default function HistoryClient({ initialData }: { initialData: TokenRow[] }) {
+type Props = {
+  initialData: TokenRow[];
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+};
+
+export default function HistoryClient({ initialData, currentPage, totalPages }: Props) {
   const supabase = supabaseBrowser();
+  const router = useRouter();
   const [rows, setRows] = useState(
     initialData.map((r) => ({
       ...r,
@@ -186,6 +195,122 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
     return name.includes(kw) || unit.includes(kw);
   });
 
+  const regenerateQRImage = async (row: any) => {
+    if (!row.token) return null;
+    const payload = { v: 1, phone: row.resident?.phone ?? '', token: row.token };
+    const url = await QRCode.toDataURL(JSON.stringify(payload));
+    setQrImages((prev) => ({ ...prev, [row.id]: url }));
+    return url;
+  };
+
+  const handleGenerateQr = async (row: any) => {
+    if (!row.resident) return;
+    setSavingTokenId(row.id);
+    setMessage(null);
+    try {
+      const expires = new Date();
+      expires.setFullYear(expires.getFullYear() + 1); // 기본 1년
+      const resp = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentId: row.resident.id,
+          name: row.resident.name,
+          carNumber: row.resident.vehicle_plate || '',
+          phone: row.resident.phone,
+          exp: expires.toISOString(),
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || 'QR 생성 실패');
+
+      const newToken = data?.qrPayload?.token;
+      const newExpires = data?.qrTokenRow?.expires_at ?? expires.toISOString();
+      // 상태 업데이트
+      setRows((prev) =>
+        prev.map((r: any) =>
+          r.id === row.id
+            ? {
+                ...r,
+                token: newToken,
+                expiresAt: newExpires,
+                expiresAtInput: toLocalInput(newExpires),
+                createdAt: data?.qrTokenRow?.created_at ?? r.createdAt,
+              }
+            : r
+        )
+      );
+      const url = await regenerateQRImage({ ...row, token: newToken });
+      if (url) setQrImages((prev) => ({ ...prev, [row.id]: url }));
+      setMessage('QR이 생성되었습니다.');
+    } catch (err: any) {
+      setMessage(err?.message ?? 'QR 생성 실패');
+    } finally {
+      setSavingTokenId(null);
+    }
+  };
+
+  const handleSendEmail = async (row: any) => {
+    if (!row.token || !row.resident?.email) {
+      setMessage('토큰 또는 이메일이 없습니다.');
+      return;
+    }
+    setSavingTokenId(row.id);
+    setMessage(null);
+    try {
+      let png: string | null = qrImages[row.id] ?? null;
+      if (!png) {
+        png = await regenerateQRImage(row);
+      }
+      if (!png) throw new Error('QR 이미지 생성 실패');
+
+      const subject = 'QR 발급 안내';
+      const html = `
+        <div>
+          <p>안녕하세요, ${row.resident.name}님.</p>
+          <p>차량번호: ${row.resident.vehicle_plate ?? '-'} / 전화번호: ${row.resident.phone ?? '-'}</p>
+          <p>QR 코드가 첨부되었습니다.</p>
+        </div>
+      `;
+
+      const resp = await fetch('/api/notifications/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: row.resident.email,
+          subject,
+          html,
+          pngDataUrl: png,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || '메일 전송 실패');
+      setMessage('메일이 전송되었습니다.');
+    } catch (err: any) {
+      setMessage(err?.message ?? '메일 전송 실패');
+    } finally {
+      setSavingTokenId(null);
+    }
+  };
+
+  const goPage = (page: number) => {
+    const safe = Math.min(Math.max(1, page), totalPages);
+    router.push(`/admin/history?page=${safe}`);
+  };
+
+  const buildPageNumbers = () => {
+    const maxButtons = 10;
+    let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    let end = start + maxButtons - 1;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxButtons + 1);
+    }
+    const pages = [];
+    for (let i = start; i <= end; i += 1) pages.push(i);
+    return pages;
+  };
+
   return (
     <main style={{ display: 'grid', gap: 16, maxWidth: 1280, margin: '0 auto' }}>
       <div>
@@ -341,17 +466,31 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
                   value={row.resident.vehicle_plate ?? ''}
                   onChange={(v) => handleResidentChange(row.resident!.id, 'vehicle_plate', v)}
                 />
-                <Field
-                  label="상태"
-                  value={row.resident.status ?? ''}
-                  onChange={(v) => handleResidentChange(row.resident!.id, 'status', v)}
-                />
               </div>
             ) : (
               <div style={{ color: '#b91c1c', fontSize: 13 }}>입주자 정보를 찾을 수 없습니다.</div>
             )}
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {!row.token ? (
+                <button
+                  className="btn btn-primary"
+                  style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
+                  disabled={savingTokenId === row.id}
+                  onClick={() => handleGenerateQr(row)}
+                >
+                  {savingTokenId === row.id ? '생성 중...' : 'QR 생성'}
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary"
+                  style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
+                  disabled={savingTokenId === row.id}
+                  onClick={() => handleSendEmail(row)}
+                >
+                  {savingTokenId === row.id ? '발송 중...' : 'QR 메일 보내기'}
+                </button>
+              )}
               <button
                 className="btn btn-primary"
                 style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
@@ -359,14 +498,6 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
                 onClick={() => handleSaveResident(row.resident)}
               >
                 {savingResidentId === row.resident?.id ? '저장 중...' : '입주자 저장'}
-              </button>
-              <button
-                className="btn"
-                style={{ border: '1px solid #e5e7eb', padding: '10px 14px', borderRadius: 10 }}
-                disabled={savingTokenId === row.id}
-                onClick={() => handleSaveToken(row)}
-              >
-                {savingTokenId === row.id ? '저장 중...' : '토큰/만료일 저장'}
               </button>
               <button
                 className="btn"
@@ -399,6 +530,46 @@ export default function HistoryClient({ initialData }: { initialData: TokenRow[]
             검색 결과가 없습니다.
           </div>
         )}
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <button onClick={() => goPage(1)} disabled={currentPage === 1} className="btn">
+          « 처음
+        </button>
+        <button onClick={() => goPage(currentPage - 1)} disabled={currentPage === 1} className="btn">
+          ‹ 이전
+        </button>
+        {buildPageNumbers().map((p) => (
+          <button
+            key={p}
+            onClick={() => goPage(p)}
+            className="btn"
+            style={{
+              border: '1px solid #e5e7eb',
+              background: p === currentPage ? '#111827' : '#fff',
+              color: p === currentPage ? '#fff' : '#111827',
+              padding: '6px 10px',
+              borderRadius: 8,
+            }}
+          >
+            {p}
+          </button>
+        ))}
+        <button onClick={() => goPage(currentPage + 1)} disabled={currentPage === totalPages} className="btn">
+          다음 ›
+        </button>
+        <button onClick={() => goPage(totalPages)} disabled={currentPage === totalPages} className="btn">
+          끝 »
+        </button>
       </div>
     </main>
   );

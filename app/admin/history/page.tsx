@@ -1,7 +1,13 @@
 import { supabaseServer } from '../../../lib/supabase-server';
 import HistoryClient from './HistoryClient';
 
-export default async function HistoryPage() {
+const PAGE_SIZE = 20;
+
+type Props = {
+  searchParams?: { page?: string };
+};
+
+export default async function HistoryPage({ searchParams }: Props) {
   const supabase = supabaseServer();
   const {
     data: { session },
@@ -14,7 +20,11 @@ export default async function HistoryPage() {
     );
   }
 
-  const { data: rows } = await supabase
+  const currentPage = Math.max(1, Number(searchParams?.page ?? '1'));
+  const from = (currentPage - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  const { data: rows, count } = await supabase
     .from('resident')
     .select(
       `
@@ -34,10 +44,11 @@ export default async function HistoryPage() {
         revoked,
         created_at
       )
-    `
+    `,
+      { count: 'exact' }
     )
     .order('created_at', { ascending: false })
-    .limit(200);
+    .range(from, to);
 
   const initialData =
     rows?.map((r: any) => {
@@ -52,6 +63,7 @@ export default async function HistoryPage() {
         resident: {
           id: r.id,
           name: r.name,
+          email: r.email ?? '',
           phone: r.phone,
           unit: r.unit ?? '',
           vehicle_plate: r.vehicle_plate ?? '',
@@ -60,5 +72,14 @@ export default async function HistoryPage() {
       };
     }) ?? [];
 
-  return <HistoryClient initialData={initialData} />;
+  const totalPages = count ? Math.max(1, Math.ceil(count / PAGE_SIZE)) : 1;
+
+  return (
+    <HistoryClient
+      initialData={initialData}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      pageSize={PAGE_SIZE}
+    />
+  );
 }

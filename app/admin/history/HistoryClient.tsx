@@ -331,7 +331,6 @@ export default function HistoryClient({ initialData, currentPage, totalPages, ad
                 </div>
                 <div style={{ display: 'grid', gap: 6, fontSize: 13, color: '#374151' }}>
                   <div>만료일: {row.expiresAt ? formatKST(row.expiresAt) : '-'}</div>
-                  <div>토큰: {row.token ?? '-'}</div>
                 </div>
               </div>
 

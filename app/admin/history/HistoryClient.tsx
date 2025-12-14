@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseBrowser } from '../../../lib/supabase-browser';
 import QRCode from 'qrcode';
+import { supabaseBrowser } from '../../../lib/supabase-browser';
 
 type Resident = {
   id: string;
   name: string;
+  email?: string | null;
   phone: string;
   unit: string | null;
   vehicle_plate: string | null;
-  status: string | null;
-  email?: string | null;
+  vehicle_type?: string | null;
 };
 
 type TokenRow = {
@@ -30,16 +30,16 @@ type Props = {
   currentPage: number;
   totalPages: number;
   pageSize: number;
+  adminRoles: Record<string, string>; // email/user_id => role(super_admin|admin)
 };
 
-export default function HistoryClient({ initialData, currentPage, totalPages }: Props) {
+export default function HistoryClient({ initialData, currentPage, totalPages, adminRoles }: Props) {
   const supabase = supabaseBrowser();
   const router = useRouter();
   const [rows, setRows] = useState(
     initialData.map((r) => ({
       ...r,
       expiresAtInput: toLocalInput(r.expiresAt),
-      editingExpiry: false,
     }))
   );
   const [savingResidentId, setSavingResidentId] = useState<string | null>(null);
@@ -47,8 +47,8 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
   const [qrImages, setQrImages] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
+  const [expiryFilter, setExpiryFilter] = useState<'all' | 'lt30' | '30to90' | 'gt90'>('all');
 
-  // 토큰이 있는 행에 대해 QR 이미지를 미리 생성
   useEffect(() => {
     rows.forEach((row) => {
       if (row.token && !qrImages[row.id]) {
@@ -59,6 +59,25 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
       }
     });
   }, [rows, qrImages]);
+
+  const filtered = useMemo(() => {
+    return rows.filter((row: any) => {
+      if (keyword.trim()) {
+        const kw = keyword.toLowerCase();
+        const name = row.resident?.name?.toLowerCase() ?? '';
+        const unit = row.resident?.unit?.toLowerCase() ?? '';
+        const email = row.resident?.email?.toLowerCase() ?? '';
+        if (!name.includes(kw) && !unit.includes(kw) && !email.includes(kw)) return false;
+      }
+      if (!row.expiresAt) return true;
+      const daysLeft = calcDaysLeft(row.expiresAt);
+      if (daysLeft === null) return true;
+      if (expiryFilter === 'lt30') return daysLeft < 30;
+      if (expiryFilter === '30to90') return daysLeft >= 30 && daysLeft <= 90;
+      if (expiryFilter === 'gt90') return daysLeft > 90;
+      return true;
+    });
+  }, [rows, keyword, expiryFilter]);
 
   function toLocalInput(value: string | null): string {
     if (!value) return '';
@@ -80,7 +99,6 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
   const formatKST = (value: string | null) => {
     if (!value) return '-';
     try {
-      const dt = new Date(value);
       return new Intl.DateTimeFormat('ko-KR', {
         year: 'numeric',
         month: '2-digit',
@@ -90,7 +108,7 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
         second: '2-digit',
         hour12: false,
         timeZone: 'Asia/Seoul',
-      }).format(dt);
+      }).format(new Date(value));
     } catch {
       return value;
     }
@@ -101,20 +119,6 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
       prev.map((row) =>
         row.resident && row.resident.id === id
           ? { ...row, resident: { ...row.resident, [field]: value } }
-          : row
-      )
-    );
-  };
-
-  const handleTokenChange = (id: string, field: 'status' | 'expiresAtInput', value: string | boolean) => {
-    setRows((prev) =>
-      prev.map((row: any) =>
-        row.id === id
-          ? {
-              ...row,
-              revoked: field === 'status' ? Boolean(value) : row.revoked,
-              expiresAtInput: field === 'expiresAtInput' ? (value as string) : row.expiresAtInput,
-            }
           : row
       )
     );
@@ -133,36 +137,15 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
           phone: resident.phone,
           unit: resident.unit,
           vehicle_plate: resident.vehicle_plate,
-          status: resident.status,
+          vehicle_type: resident.vehicle_type,
         })
         .eq('id', resident.id);
       if (error) throw error;
       setMessage('입주자 정보가 저장되었습니다.');
     } catch (err: any) {
-      setMessage(err.message ?? '저장에 실패했습니다.');
+      setMessage(err.message ?? '입주자 저장에 실패했습니다.');
     } finally {
       setSavingResidentId(null);
-    }
-  };
-
-  const handleSaveToken = async (row: any) => {
-    setSavingTokenId(row.id);
-    setMessage(null);
-    try {
-      const expiresIso = row.expiresAtInput ? toISOFromInput(row.expiresAtInput) : null;
-      const { error } = await supabase
-        .from('qr_tokens')
-        .update({
-          revoked: row.revoked ?? false,
-          expires_at: expiresIso,
-        })
-        .eq('id', row.id);
-      if (error) throw error;
-      setMessage('토큰 상태/만료일이 저장되었습니다.');
-    } catch (err: any) {
-      setMessage(err?.message ?? '저장에 실패했습니다.');
-    } finally {
-      setSavingTokenId(null);
     }
   };
 
@@ -179,21 +162,13 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
         await supabase.from('qr_tokens').delete().eq('id', tokenId);
         setRows((prev) => prev.filter((r: any) => r.id !== tokenId));
       }
-      setMessage('삭제했습니다.');
+      setMessage('삭제되었습니다.');
     } catch (err: any) {
       setMessage(err?.message ?? '삭제에 실패했습니다.');
     } finally {
       setSavingTokenId(null);
     }
   };
-
-  const filtered = rows.filter((row: any) => {
-    if (!keyword.trim()) return true;
-    const kw = keyword.toLowerCase();
-    const name = row.resident?.name?.toLowerCase() ?? '';
-    const unit = row.resident?.unit?.toLowerCase() ?? '';
-    return name.includes(kw) || unit.includes(kw);
-  });
 
   const regenerateQRImage = async (row: any) => {
     if (!row.token) return null;
@@ -209,7 +184,7 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
     setMessage(null);
     try {
       const expires = new Date();
-      expires.setFullYear(expires.getFullYear() + 1); // 기본 1년
+      expires.setFullYear(expires.getFullYear() + 1);
       const resp = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,300 +197,251 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
         }),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || 'QR 생성 실패');
+      if (!resp.ok) throw new Error(data?.error || 'QR 발급에 실패했습니다.');
 
       const newToken = data?.qrPayload?.token;
       const newExpires = data?.qrTokenRow?.expires_at ?? expires.toISOString();
-      // 상태 업데이트
       setRows((prev) =>
         prev.map((r: any) =>
-          r.id === row.id
+          r.resident?.id === row.resident.id
             ? {
                 ...r,
                 token: newToken,
                 expiresAt: newExpires,
                 expiresAtInput: toLocalInput(newExpires),
-                createdAt: data?.qrTokenRow?.created_at ?? r.createdAt,
               }
             : r
         )
       );
-      const url = await regenerateQRImage({ ...row, token: newToken });
-      if (url) setQrImages((prev) => ({ ...prev, [row.id]: url }));
-      setMessage('QR이 생성되었습니다.');
+      await regenerateQRImage({ ...row, token: newToken });
+      alert('QR이 발급되고 이메일 발송을 시도합니다.');
+      await handleSendEmail({ ...row, token: newToken });
     } catch (err: any) {
-      setMessage(err?.message ?? 'QR 생성 실패');
+      alert(err?.message ?? 'QR 발급에 실패했습니다.');
     } finally {
       setSavingTokenId(null);
     }
   };
 
   const handleSendEmail = async (row: any) => {
-    if (!row.token || !row.resident?.email) {
-      setMessage('토큰 또는 이메일이 없습니다.');
+    if (!row.resident?.email) {
+      alert('이메일이 없어 발송할 수 없습니다.');
       return;
     }
     setSavingTokenId(row.id);
     setMessage(null);
     try {
-      let png: string | null = qrImages[row.id] ?? null;
-      if (!png) {
-        png = await regenerateQRImage(row);
-      }
-      if (!png) throw new Error('QR 이미지 생성 실패');
-
-      const subject = 'QR 발급 안내';
-      const html = `
-        <div>
-          <p>안녕하세요, ${row.resident.name}님.</p>
-          <p>차량번호: ${row.resident.vehicle_plate ?? '-'} / 전화번호: ${row.resident.phone ?? '-'}</p>
-          <p>QR 코드가 첨부되었습니다.</p>
-        </div>
-      `;
-
+      const qrImage = qrImages[row.id] ?? (await regenerateQRImage(row));
       const resp = await fetch('/api/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: row.resident.email,
-          subject,
-          html,
-          pngDataUrl: png,
+          email: row.resident.email,
+          name: row.resident.name,
+          phone: row.resident.phone,
+          vehiclePlate: row.resident.vehicle_plate,
+          token: row.token,
+          qrImage,
+          expiresAt: row.expiresAt,
         }),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || '메일 전송 실패');
-      setMessage('메일이 전송되었습니다.');
+      if (!resp.ok) throw new Error(data?.error || '이메일 발송에 실패했습니다.');
+      setMessage('이메일을 보냈습니다.');
     } catch (err: any) {
-      setMessage(err?.message ?? '메일 전송 실패');
+      alert(err?.message ?? '이메일 발송에 실패했습니다.');
     } finally {
       setSavingTokenId(null);
     }
   };
 
   const goPage = (page: number) => {
-    const safe = Math.min(Math.max(1, page), totalPages);
-    router.push(`/admin/history?page=${safe}`);
-  };
-
-  const buildPageNumbers = () => {
-    const maxButtons = 10;
-    let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
-    let end = start + maxButtons - 1;
-    if (end > totalPages) {
-      end = totalPages;
-      start = Math.max(1, end - maxButtons + 1);
-    }
-    const pages = [];
-    for (let i = start; i <= end; i += 1) pages.push(i);
-    return pages;
+    router.push(`/admin/history?page=${page}`);
   };
 
   return (
-    <main style={{ display: 'grid', gap: 16, maxWidth: 1280, margin: '0 auto' }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>입주자 관리</h1>
-        <p style={{ color: '#6b7280', margin: '4px 0 0', fontSize: 13 }}>
-          생성된 QR 이력은 유지되며 토큰은 수정 불가합니다. 입주민 정보만 수정 가능합니다. 새 QR 발급이 필요하면
-          이 카드에서 바로 생성하세요.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <main style={{ display: 'grid', gap: 16, maxWidth: 1280, margin: '0 auto', padding: '0 12px 24px' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
-          style={{
-            flex: 1,
-            border: '1px solid #e5e7eb',
-            borderRadius: 10,
-            padding: '10px 12px',
-            fontSize: 14,
-          }}
-          placeholder="이름 또는 동/호 검색"
+          placeholder="이름, 동/호, 이메일 검색"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
+          style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', width: 260 }}
         />
-      </div>
-
-      {message && (
-        <div
-          style={{
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid #e5e7eb',
-            background: '#f8fafc',
-            color: '#0f172a',
-            fontSize: 13,
-          }}
+        <select
+          value={expiryFilter}
+          onChange={(e) => setExpiryFilter(e.target.value as any)}
+          style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', width: 180 }}
         >
-          {message}
-        </div>
-      )}
+          <option value="all">만료일: 전체</option>
+          <option value="lt30">30일 미만</option>
+          <option value="30to90">30~90일</option>
+          <option value="gt90">90일 이상</option>
+        </select>
+        {message && <span style={{ color: '#2563eb', fontSize: 13 }}>{message}</span>}
+      </div>
 
       <div
         style={{
           display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
           gap: 12,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         }}
       >
-        {filtered.map((row: any) => (
-          <div
-            key={row.id}
-            className="card"
-            style={{
-              padding: 14,
-              display: 'grid',
-              gap: 10,
-              border: '1px solid #e5e7eb',
-              background: '#fff',
-            }}
-          >
-            <div style={{ display: 'grid', gap: 6, fontSize: 13, color: '#6b7280' }}>
-              <span>QR 생성: {formatKST(row.createdAt)}</span>
-              {qrImages[row.id] && (
-                <div style={{ marginTop: 4 }}>
-                  <img
-                    src={qrImages[row.id]}
-                    alt="QR 코드"
-                    style={{ width: '100%', maxWidth: 200, border: '1px solid #e5e7eb', borderRadius: 8 }}
-                  />
+        {filtered.map((row: any) => {
+          const role = row.resident?.email ? adminRoles[row.resident.email] : undefined;
+          const roleColor = role === 'super_admin' ? '#dc2626' : role === 'admin' ? '#2563eb' : '#e5e7eb';
+          const daysLeftText = renderDaysLeft(row.expiresAt);
+          return (
+            <div
+              key={row.id}
+              style={{
+                border: `1px solid ${roleColor}`,
+                borderRadius: 14,
+                padding: 14,
+                background: '#fff',
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'grid', gap: 2, fontSize: 12, color: '#6b7280' }}>
+                  <span>QR 발급: {formatKST(row.createdAt)}</span>
+                  <span>만료: {daysLeftText}</span>
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span>만료일:</span>
-                {row.editingExpiry ? (
-                  <input
-                    type="datetime-local"
-                    value={row.expiresAtInput || ''}
-                    onChange={(e) => handleTokenChange(row.id, 'expiresAtInput', e.target.value)}
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 8,
-                      padding: '6px 8px',
-                      fontSize: 13,
-                    }}
-                  />
-                ) : (
-                  <span>{row.expiresAt ? formatKST(row.expiresAt) : '미설정'}</span>
-                )}
-                <button
-                  onClick={() =>
-                    setRows((prev) =>
-                      prev.map((r: any) =>
-                        r.id === row.id ? { ...r, editingExpiry: !r.editingExpiry } : r
-                      )
-                    )
-                  }
-                  style={{
-                    border: '1px solid #e5e7eb',
-                    background: '#f8fafc',
-                    borderRadius: 8,
-                    padding: '4px 8px',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                  }}
-                >
-                  {row.editingExpiry ? '저장' : '수정'}
-                </button>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>{row.tokenVersion ? `버전 v${row.tokenVersion}` : ''}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span>상태:</span>
-                <button
-                  onClick={() => handleTokenChange(row.id, 'status', row.revoked ? false : true)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 10,
-                    border: '1px solid #e5e7eb',
-                    background: row.revoked ? '#fee2e2' : '#dcfce7',
-                    color: row.revoked ? '#b91c1c' : '#166534',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    fontSize: 12,
-                  }}
-                >
-                  {row.revoked ? '비활성' : '활성'}
-                </button>
-              </div>
-            </div>
 
-            {row.resident ? (
-              <div style={{ display: 'grid', gap: 10 }}>
-                <Field label="ID" value={row.resident.id ?? ''} readOnly />
-                <Field
-                  label="이메일"
-                  value={row.resident.email ?? ''}
-                  onChange={(v) => handleResidentChange(row.resident!.id, 'email', v)}
-                />
-                <Field
-                  label={`QR 생성: ${formatKST(row.createdAt)}`}
-                  value={row.resident.name ?? ''}
-                  onChange={(v) => handleResidentChange(row.resident!.id, 'name', v)}
-                />
-                <Field
-                  label="전화번호"
-                  value={row.resident.phone ?? ''}
-                  onChange={(v) => handleResidentChange(row.resident!.id, 'phone', v)}
-                />
-                <Field
-                  label="동/호"
-                  value={row.resident.unit ?? ''}
-                  onChange={(v) => handleResidentChange(row.resident!.id, 'unit', v)}
-                />
-                <Field
-                  label="차량번호"
-                  value={row.resident.vehicle_plate ?? ''}
-                  onChange={(v) => handleResidentChange(row.resident!.id, 'vehicle_plate', v)}
-                />
-              </div>
-            ) : (
-              <div style={{ color: '#b91c1c', fontSize: 13 }}>입주자 정보를 찾을 수 없습니다.</div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {!row.token ? (
-                <button
-                  className="btn btn-primary"
-                  style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
-                  disabled={savingTokenId === row.id}
-                  onClick={() => handleGenerateQr(row)}
-                >
-                  {savingTokenId === row.id ? '생성 중...' : 'QR 생성'}
-                </button>
-              ) : (
-                <button
-                  className="btn btn-primary"
-                  style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
-                  disabled={savingTokenId === row.id}
-                  onClick={() => handleSendEmail(row)}
-                >
-                  {savingTokenId === row.id ? '발송 중...' : 'QR 메일 보내기'}
-                </button>
-              )}
-              <button
-                className="btn btn-primary"
-                style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
-                disabled={!row.resident || savingResidentId === row.resident.id}
-                onClick={() => handleSaveResident(row.resident)}
-              >
-                {savingResidentId === row.resident?.id ? '저장 중...' : '입주자 저장'}
-              </button>
-              <button
-                className="btn"
+              <div
                 style={{
                   border: '1px solid #e5e7eb',
-                  padding: '10px 14px',
                   borderRadius: 10,
-                  background: '#fee2e2',
-                  color: '#b91c1c',
+                  padding: 10,
+                  display: 'grid',
+                  gap: 8,
+                  background: '#f9fafb',
                 }}
-                disabled={savingTokenId === row.id}
-                onClick={() => handleDeleteToken(row)}
               >
-                삭제
-              </button>
+                <div style={{ textAlign: 'center' }}>
+                  {qrImages[row.id] ? (
+                    <img src={qrImages[row.id]} alt="QR" style={{ width: 180, margin: '0 auto' }} />
+                  ) : (
+                    <div style={{ color: '#9ca3af', fontSize: 13 }}>QR 이미지 없음</div>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gap: 6, fontSize: 13, color: '#374151' }}>
+                  <div>만료일: {row.expiresAt ? formatKST(row.expiresAt) : '-'}</div>
+                  <div>토큰: {row.token ?? '-'}</div>
+                </div>
+              </div>
+
+              {row.resident ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <Field label="ID" value={row.resident.id ?? ''} readOnly />
+                  <Field
+                    label="이메일"
+                    value={row.resident.email ?? ''}
+                    onChange={(v) => handleResidentChange(row.resident!.id, 'email', v)}
+                  />
+                  <Field
+                    label="이름"
+                    value={row.resident.name ?? ''}
+                    onChange={(v) => handleResidentChange(row.resident!.id, 'name', v)}
+                  />
+                  <Field
+                    label="전화번호"
+                    value={row.resident.phone ?? ''}
+                    onChange={(v) => handleResidentChange(row.resident!.id, 'phone', v)}
+                  />
+                  <Field
+                    label="동/호"
+                    value={row.resident.unit ?? ''}
+                    onChange={(v) => handleResidentChange(row.resident!.id, 'unit', v)}
+                  />
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: '#374151' }}>차량 정보</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 6 }}>
+                      <input
+                        style={{
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 10,
+                          padding: '10px 10px',
+                          fontSize: 14,
+                          width: '100%',
+                        }}
+                        placeholder="차량번호"
+                        value={row.resident.vehicle_plate ?? ''}
+                        onChange={(e) => handleResidentChange(row.resident!.id, 'vehicle_plate', e.target.value)}
+                      />
+                      <select
+                        style={{
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 10,
+                          padding: '10px 10px',
+                          fontSize: 14,
+                          width: '100%',
+                        }}
+                        value={row.resident.vehicle_type ?? ''}
+                        onChange={(e) => handleResidentChange(row.resident!.id, 'vehicle_type', e.target.value)}
+                      >
+                        <option value="">선택</option>
+                        <option value="ice">내연기관</option>
+                        <option value="ev">전기차</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ color: '#b91c1c', fontSize: 13 }}>입주자 정보를 찾을 수 없습니다.</div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!row.token ? (
+                  <button
+                    className="btn btn-primary"
+                    style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
+                    disabled={savingTokenId === row.id}
+                    onClick={() => handleGenerateQr(row)}
+                  >
+                    {savingTokenId === row.id ? '발급 중...' : 'QR 발급'}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
+                    disabled={savingTokenId === row.id}
+                    onClick={() => handleSendEmail(row)}
+                  >
+                    {savingTokenId === row.id ? '이메일 발송 중...' : 'QR 이메일 보내기'}
+                  </button>
+                )}
+                <button
+                  className="btn btn-primary"
+                  style={{ border: 'none', padding: '10px 14px', borderRadius: 10 }}
+                  disabled={!row.resident || savingResidentId === row.resident.id}
+                  onClick={() => handleSaveResident(row.resident)}
+                >
+                  {savingResidentId === row.resident?.id ? '저장 중...' : '입주자 저장'}
+                </button>
+                <button
+                  className="btn"
+                  style={{
+                    border: '1px solid #e5e7eb',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: '#fee2e2',
+                    color: '#b91c1c',
+                  }}
+                  disabled={savingTokenId === row.id}
+                  onClick={() => handleDeleteToken(row)}
+                >
+                  삭제
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
         {filtered.length === 0 && (
           <div
             style={{
@@ -527,7 +453,7 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
               fontSize: 14,
             }}
           >
-            검색 결과가 없습니다.
+            표시할 데이터가 없습니다.
           </div>
         )}
       </div>
@@ -543,12 +469,12 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
         }}
       >
         <button onClick={() => goPage(1)} disabled={currentPage === 1} className="btn">
-          « 처음
+          처음
         </button>
         <button onClick={() => goPage(currentPage - 1)} disabled={currentPage === 1} className="btn">
-          ‹ 이전
+          이전
         </button>
-        {buildPageNumbers().map((p) => (
+        {buildPageNumbers({ currentPage, totalPages }).map((p) => (
           <button
             key={p}
             onClick={() => goPage(p)}
@@ -565,10 +491,10 @@ export default function HistoryClient({ initialData, currentPage, totalPages }: 
           </button>
         ))}
         <button onClick={() => goPage(currentPage + 1)} disabled={currentPage === totalPages} className="btn">
-          다음 ›
+          다음
         </button>
         <button onClick={() => goPage(totalPages)} disabled={currentPage === totalPages} className="btn">
-          끝 »
+          끝
         </button>
       </div>
     </main>
@@ -595,6 +521,7 @@ function Field({
           borderRadius: 10,
           padding: '10px 10px',
           fontSize: 14,
+          width: '100%',
           ...(readOnly ? { backgroundColor: '#f5f5f5' } : {}),
         }}
         value={value}
@@ -604,3 +531,26 @@ function Field({
     </label>
   );
 }
+
+const calcDaysLeft = (expiresAt: string | null) => {
+  if (!expiresAt) return null;
+  const now = new Date();
+  const exp = new Date(expiresAt);
+  const diff = exp.getTime() - now.getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+};
+
+const renderDaysLeft = (expiresAt: string | null) => {
+  const d = calcDaysLeft(expiresAt);
+  if (d === null) return '미설정';
+  if (d < 0) return `만료(${d}일)`;
+  return `D-${d}`;
+};
+
+const buildPageNumbers = ({ currentPage, totalPages }: { currentPage: number; totalPages: number }) => {
+  const pages: number[] = [];
+  const start = Math.max(1, currentPage - 2);
+  const end = Math.min(totalPages, currentPage + 2);
+  for (let i = start; i <= end; i += 1) pages.push(i);
+  return pages;
+};

@@ -8,9 +8,15 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, phone, unit, vehicle_plate, email, password } = await req.json();
-    if (!name || !phone || !unit || !email || !password) {
-      return NextResponse.json({ error: '필수 값 누락' }, { status: 400 });
+    const { name, phone, unit, vehicle_plate, email, password, passwordConfirm } = await req.json();
+    if (!name || !phone || !unit || !email || !password || !passwordConfirm) {
+      return NextResponse.json(
+        { error: '이름, 휴대전화, 동/호, 이메일, 비밀번호, 비밀번호 확인은 필수입니다.' },
+        { status: 400 }
+      );
+    }
+    if (password !== passwordConfirm) {
+      return NextResponse.json({ error: '비밀번호와 비밀번호 확인이 일치하지 않습니다.' }, { status: 400 });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -21,7 +27,7 @@ export async function POST(req: NextRequest) {
       email_confirm: true,
     });
     if (createErr || !createdUser?.user) {
-      return NextResponse.json({ error: createErr?.message ?? '사용자 생성 실패' }, { status: 500 });
+      return NextResponse.json({ error: createErr?.message ?? '계정 생성에 실패했습니다.' }, { status: 500 });
     }
     const userId = createdUser.user.id;
 

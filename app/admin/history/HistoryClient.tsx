@@ -228,10 +228,17 @@ export default function HistoryClient({ initialData, currentPage, totalPages, ad
       alert('이메일이 없어 발송할 수 없습니다.');
       return;
     }
+    if (!row.token) {
+      alert('토큰이 없어 이메일을 보낼 수 없습니다. 먼저 QR을 발급하세요.');
+      return;
+    }
     setSavingTokenId(row.id);
     setMessage(null);
     try {
       const qrImage = qrImages[row.id] ?? (await regenerateQRImage(row));
+      if (!qrImage) {
+        throw new Error('QR 이미지를 만들지 못했습니다. 새로고침 후 다시 시도하세요.');
+      }
       const resp = await fetch('/api/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

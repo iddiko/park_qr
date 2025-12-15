@@ -125,7 +125,7 @@ export default function NavBar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 12 }}>
         <Link
           href={role === 'guest' ? '/' : visibleMenus[0]?.href ?? '/'}
-          style={{ fontWeight: 800, fontSize: 16, color: '#111827', textDecoration: 'none' }}
+          style={{ fontWeight: 800, fontSize: 16, color: '#dc2626', textDecoration: 'none' }}
         >
           PARKSYS
         </Link>

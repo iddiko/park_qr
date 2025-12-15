@@ -22,17 +22,7 @@ export default function ScanPage() {
     );
 
     const onScanSuccess = (decodedText: string) => {
-      setRaw(decodedText);
-      setMessage(null);
-      try {
-        const obj = JSON.parse(decodedText);
-        const phone = obj.phone ?? obj.tel ?? obj.contact ?? '';
-        const token = obj.token ?? '';
-        setParsed({ phone, token, resident: !!phone });
-      } catch {
-        setParsed(null);
-        setMessage('QR 내용이 JSON 형식이 아닙니다.');
-      }
+      handleDecoded(decodedText);
     };
 
     const onScanError = () => {
@@ -46,8 +36,7 @@ export default function ScanPage() {
     };
   }, []);
 
-  const handleManual = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
+  const handleDecoded = (text: string) => {
     setRaw(text);
     setMessage(null);
     try {
@@ -57,8 +46,12 @@ export default function ScanPage() {
       setParsed({ phone, token, resident: !!phone });
     } catch {
       setParsed(null);
-      setMessage('직접 입력한 내용이 JSON 형식이 아닙니다.');
+      setMessage('QR 내용을 읽었지만 JSON 형식이 아닙니다.');
     }
+  };
+
+  const handleManual = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    handleDecoded(e.target.value);
   };
 
   return (
@@ -68,7 +61,7 @@ export default function ScanPage() {
         카메라로 QR을 비추면 전화번호를 바로 확인할 수 있습니다. (관리자는 토큰으로 전체 정보를 복호화할 수 있습니다.)
       </p>
 
-      <div id="qr-reader" style={{ width: '100%', minHeight: 320 }} />
+      <div id="qr-reader" style={{ width: '100%', minHeight: 320, borderRadius: 12, overflow: 'hidden' }} />
 
       <textarea
         rows={4}
@@ -81,23 +74,28 @@ export default function ScanPage() {
         <p style={{ margin: 0, color: '#6b7280' }}>스캔 결과</p>
         {message && <div style={{ color: '#b91c1c', fontSize: 13 }}>{message}</div>}
         {!message && parsed && (
-          <div style={{ display: 'grid', gap: 6, fontSize: 14 }}>
-            <div>
-              입주자 여부: <strong>{parsed.resident ? '입주자' : '미확인'}</strong>
-            </div>
+          <div style={{ display: 'grid', gap: 8, fontSize: 14 }}>
             <div>
               연락처: <strong>{parsed.phone || '없음'}</strong>
             </div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>
-              (토큰 앞부분: {parsed.token ? parsed.token.slice(0, 8) + '...' : '없음'})
+              토큰 앞부분: {parsed.token ? parsed.token.slice(0, 10) + '...' : '없음'}
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>
+              QR을 스캔하면 여기 결과가 바로 갱신됩니다.
             </div>
           </div>
         )}
         {!message && !parsed && <div style={{ color: '#6b7280' }}>아직 스캔한 내용이 없습니다.</div>}
         {raw && (
-          <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, color: '#6b7280' }}>
-            {raw}
-          </pre>
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ cursor: 'pointer', color: '#2563eb' }}>원본 데이터 보기</summary>
+            <pre
+              style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, color: '#6b7280' }}
+            >
+              {raw}
+            </pre>
+          </details>
         )}
       </div>
     </main>

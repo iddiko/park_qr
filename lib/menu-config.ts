@@ -7,9 +7,12 @@ export type MenuItem = {
   roles: Role[];
 };
 
+// 관리자와 일반 대시보드 중복 노출 방지를 위해
+// - member/manager: /user/dashboard
+// - admin/super_admin: /admin/dashboard
 export const MENU_ITEMS: MenuItem[] = [
   { id: 'home', label: 'Home', href: '/', roles: ['guest'] },
-  { id: 'dashboard-user', label: '대시보드', href: '/user/dashboard', roles: ['member', 'manager', 'admin', 'super_admin'] },
+  { id: 'dashboard-user', label: '대시보드', href: '/user/dashboard', roles: ['member', 'manager'] },
   { id: 'dashboard-admin', label: '대시보드', href: '/admin/dashboard', roles: ['admin', 'super_admin'] },
   { id: 'scan', label: 'Scan', href: '/scan', roles: ['guest', 'member', 'manager', 'admin', 'super_admin'] },
   { id: 'resident-manage', label: '입주자 관리', href: '/admin/history', roles: ['member', 'manager', 'admin', 'super_admin'] },

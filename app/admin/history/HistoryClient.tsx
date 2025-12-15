@@ -243,12 +243,20 @@ export default function HistoryClient({ initialData, currentPage, totalPages, ad
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: row.resident.email,
+          to: row.resident.email,
+          subject: `QR 발급 안내 - ${row.resident.name ?? ''}`,
+          html: `
+            <p>${row.resident.name ?? ''}님, 안녕하세요.</p>
+            <p>차량번호: ${row.resident.vehicle_plate ?? '-'} / 전화번호: ${row.resident.phone ?? '-'}</p>
+            <p>QR 이미지를 첨부파일로 발송합니다.</p>
+            <p>만료일: ${row.expiresAt ? formatKST(row.expiresAt) : '미설정'}</p>
+          `,
+          pngDataUrl: qrImage,
+          // 아래 필드는 서버에서 사용하지 않지만 추후 기록용으로 남겨둠
           name: row.resident.name,
           phone: row.resident.phone,
           vehiclePlate: row.resident.vehicle_plate,
           token: row.token,
-          qrImage,
           expiresAt: row.expiresAt,
         }),
       });

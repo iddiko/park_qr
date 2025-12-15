@@ -12,6 +12,8 @@ export default function NavBar() {
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [adminRole, setAdminRole] = useState<Role | null>(null); // super_admin | admin | manager | member | guest
   const [menuVis, setMenuVis] = useState<MenuVisibility>({});
+  const [isMobile, setIsMobile] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const refreshState = async () => {
     const { data } = await supabase.auth.getUser();
@@ -62,6 +64,18 @@ export default function NavBar() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const update = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) setMenuOpen(false);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
   }, []);
 
   const role: Role = adminRole ?? (sessionEmail ? 'member' : 'guest');
@@ -118,17 +132,53 @@ export default function NavBar() {
         <span style={{ fontSize: 12, color: '#9ca3af' }}>무료 QR 차량 식별</span>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ marginLeft: 'auto' }}>
+        {isMobile && (
+          <button
+            aria-label="메뉴 열기"
+            onClick={() => setMenuOpen((p) => !p)}
+            style={{
+              border: '1px solid #e5e7eb',
+              background: '#fff',
+              borderRadius: 8,
+              padding: '8px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            ☰
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          width: '100%',
+          display: isMobile ? (menuOpen ? 'flex' : 'none') : 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: isMobile ? 'flex-start' : 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? 8 : 14,
+          padding: isMobile ? '8px 4px' : 0,
+          flexWrap: isMobile ? 'nowrap' : 'wrap',
+        }}
+      >
         {visibleMenus.map((item) => (
           <Link
             key={item.id}
             href={item.href}
             style={{
-              padding: '4px 6px',
-              borderRadius: 6,
+              padding: isMobile ? '10px 12px' : '4px 6px',
+              borderRadius: 10,
               textDecoration: 'none',
               color: '#111827',
-              fontWeight: 500,
+              fontWeight: 600,
+              border: isMobile ? '1px solid #e5e7eb' : 'none',
+              background: isMobile ? '#fff' : 'transparent',
+              width: isMobile ? '100%' : 'auto',
+              textAlign: isMobile ? 'left' : 'center',
+            }}
+            onClick={() => {
+              if (isMobile) setMenuOpen(false);
             }}
           >
             {item.label}

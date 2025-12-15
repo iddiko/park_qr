@@ -132,7 +132,15 @@ export default function NavBar() {
         <span style={{ fontSize: 12, color: '#9ca3af' }}>무료 QR 차량 식별</span>
       </div>
 
-      <div style={{ marginLeft: 'auto' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          flex: 1,
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
         {isMobile && (
           <button
             aria-label="메뉴 열기"
@@ -148,45 +156,45 @@ export default function NavBar() {
             ☰
           </button>
         )}
+
+        <div
+          style={{
+            flex: 1,
+            display: isMobile ? (menuOpen ? 'flex' : 'none') : 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: isMobile ? 'flex-start' : 'center',
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: isMobile ? 8 : 14,
+            padding: isMobile ? '8px 4px' : 0,
+            flexWrap: isMobile ? 'nowrap' : 'wrap',
+          }}
+        >
+          {visibleMenus.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              style={{
+                padding: isMobile ? '10px 12px' : '4px 6px',
+                borderRadius: 10,
+                textDecoration: 'none',
+                color: '#111827',
+                fontWeight: 600,
+                border: isMobile ? '1px solid #e5e7eb' : 'none',
+                background: isMobile ? '#fff' : 'transparent',
+                width: isMobile ? '100%' : 'auto',
+                textAlign: isMobile ? 'left' : 'center',
+              }}
+              onClick={() => {
+                if (isMobile) setMenuOpen(false);
+              }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
-      <div
-        style={{
-          width: '100%',
-          display: isMobile ? (menuOpen ? 'flex' : 'none') : 'flex',
-          flexDirection: isMobile ? 'column' : 'row',
-          justifyContent: isMobile ? 'flex-start' : 'center',
-          alignItems: isMobile ? 'stretch' : 'center',
-          gap: isMobile ? 8 : 14,
-          padding: isMobile ? '8px 4px' : 0,
-          flexWrap: isMobile ? 'nowrap' : 'wrap',
-        }}
-      >
-        {visibleMenus.map((item) => (
-          <Link
-            key={item.id}
-            href={item.href}
-            style={{
-              padding: isMobile ? '10px 12px' : '4px 6px',
-              borderRadius: 10,
-              textDecoration: 'none',
-              color: '#111827',
-              fontWeight: 600,
-              border: isMobile ? '1px solid #e5e7eb' : 'none',
-              background: isMobile ? '#fff' : 'transparent',
-              width: isMobile ? '100%' : 'auto',
-              textAlign: isMobile ? 'left' : 'center',
-            }}
-            onClick={() => {
-              if (isMobile) setMenuOpen(false);
-            }}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
-
-      <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {role === 'guest' &&
           rightGuestLinks.map((item) => (
             <Link

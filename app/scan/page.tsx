@@ -83,9 +83,44 @@ export default function ScanPage() {
   };
 
   return (
-    <main style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px', display: 'grid', gap: 12 }}>
+    <main style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px', display: 'grid', gap: 16 }}>
       <h1 style={{ margin: 0 }}>QR 스캔</h1>
-      <p style={{ color: '#6b7280', margin: 0 }}>QR을 비추면 연락처와 입주자 여부만 표시합니다.</p>
+      <p style={{ color: '#6b7280', margin: 0 }}>QR을 비추면 상단에 결과(입주자 여부, 연락처)가 고정 표시됩니다.</p>
+
+      {/* 상단 고정 결과 카드 */}
+      <div
+        className="card"
+        style={{
+          position: 'sticky',
+          top: 12,
+          zIndex: 5,
+          padding: 16,
+          border: '2px solid #e5e7eb',
+          display: 'grid',
+          gap: 10,
+          background: '#fff',
+        }}
+      >
+        <p style={{ margin: 0, color: '#6b7280' }}>스캔 결과</p>
+        {message && <div style={{ color: '#b91c1c', fontSize: 14 }}>{message}</div>}
+        {!message && parsed && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 800,
+                color: parsed.resident ? '#2563eb' : '#dc2626',
+              }}
+            >
+              {parsed.resident ? '입주자' : '미확인'}
+            </div>
+            <div style={{ fontSize: 16 }}>
+              연락처: <strong>{parsed.phone || '없음'}</strong>
+            </div>
+          </div>
+        )}
+        {!message && !parsed && <div style={{ color: '#6b7280' }}>아직 스캔한 내용이 없습니다.</div>}
+      </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button
@@ -107,25 +142,15 @@ export default function ScanPage() {
       />
 
       <div className="card" style={{ padding: 12, borderRadius: 10, border: '1px solid #e5e7eb' }}>
-        <p style={{ margin: 0, color: '#6b7280' }}>스캔 결과</p>
-        {message && <div style={{ color: '#b91c1c', fontSize: 13 }}>{message}</div>}
-        {!message && parsed && (
-          <div style={{ display: 'grid', gap: 8, fontSize: 14 }}>
-            <div>
-              연락처: <strong>{parsed.phone || '없음'}</strong>
-            </div>
-            <div style={{ fontSize: 13, color: '#374151' }}>
-              입주자 여부: <strong>{parsed.resident ? '입주자' : '미확인'}</strong>
-            </div>
-          </div>
-        )}
-        {!message && !parsed && <div style={{ color: '#6b7280' }}>아직 스캔한 내용이 없습니다.</div>}
-        {raw && (
+        <p style={{ margin: 0, color: '#6b7280' }}>원본 데이터</p>
+        {raw ? (
           <pre
             style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, color: '#6b7280' }}
           >
             {raw}
           </pre>
+        ) : (
+          <div style={{ color: '#6b7280' }}>스캔된 원본이 없습니다.</div>
         )}
       </div>
     </main>

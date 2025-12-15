@@ -1,7 +1,7 @@
 'use client';
 
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { useEffect, useState } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { useEffect, useRef, useState } from 'react';
 
 type ParsedQR = {
   phone?: string;
@@ -13,28 +13,56 @@ export default function ScanPage() {
   const [raw, setRaw] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedQR | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [facing, setFacing] = useState<'environment' | 'user'>('environment');
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isStartingRef = useRef(false);
 
   useEffect(() => {
-    const scanner = new Html5QrcodeScanner(
-      'qr-reader',
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      false
-    );
-
-    const onScanSuccess = (decodedText: string) => {
-      handleDecoded(decodedText);
-    };
-
-    const onScanError = () => {
-      // 스캔 실패는 무시 (연속 오류 출력 방지)
-    };
-
-    scanner.render(onScanSuccess, onScanError);
-
+    startScanner();
     return () => {
-      scanner.clear().catch(() => {});
+      stopScanner();
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facing]);
+
+  const startScanner = async () => {
+    if (isStartingRef.current) return;
+    isStartingRef.current = true;
+    try {
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop();
+          await scannerRef.current.clear();
+        } catch {
+          // ignore
+        }
+      }
+      const qr = new Html5Qrcode('qr-reader');
+      scannerRef.current = qr;
+      await qr.start(
+        { facingMode: facing },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => handleDecoded(decodedText),
+        () => {}
+      );
+    } catch (err: any) {
+      setMessage(err?.message ?? '카메라를 시작하지 못했습니다.');
+    } finally {
+      isStartingRef.current = false;
+    }
+  };
+
+  const stopScanner = async () => {
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+        await scannerRef.current.clear();
+      }
+    } catch {
+      // ignore
+    }
+    scannerRef.current = null;
+  };
 
   const handleDecoded = (text: string) => {
     setRaw(text);
@@ -57,9 +85,17 @@ export default function ScanPage() {
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px', display: 'grid', gap: 12 }}>
       <h1 style={{ margin: 0 }}>QR 스캔</h1>
-      <p style={{ color: '#6b7280', margin: 0 }}>
-        카메라로 QR을 비추면 전화번호를 바로 확인할 수 있습니다. (관리자는 토큰으로 전체 정보를 복호화할 수 있습니다.)
-      </p>
+      <p style={{ color: '#6b7280', margin: 0 }}>QR을 비추면 연락처와 입주자 여부만 표시합니다.</p>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button
+          className="btn"
+          style={{ border: '1px solid #e5e7eb', padding: '8px 12px', borderRadius: 10 }}
+          onClick={() => setFacing((prev) => (prev === 'environment' ? 'user' : 'environment'))}
+        >
+          카메라 전환 ({facing === 'environment' ? '후면' : '전면'})
+        </button>
+      </div>
 
       <div id="qr-reader" style={{ width: '100%', minHeight: 320, borderRadius: 12, overflow: 'hidden' }} />
 
@@ -78,24 +114,18 @@ export default function ScanPage() {
             <div>
               연락처: <strong>{parsed.phone || '없음'}</strong>
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280' }}>
-              토큰 앞부분: {parsed.token ? parsed.token.slice(0, 10) + '...' : '없음'}
-            </div>
-            <div style={{ fontSize: 12, color: '#6b7280' }}>
-              QR을 스캔하면 여기 결과가 바로 갱신됩니다.
+            <div style={{ fontSize: 13, color: '#374151' }}>
+              입주자 여부: <strong>{parsed.resident ? '입주자' : '미확인'}</strong>
             </div>
           </div>
         )}
         {!message && !parsed && <div style={{ color: '#6b7280' }}>아직 스캔한 내용이 없습니다.</div>}
         {raw && (
-          <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: 'pointer', color: '#2563eb' }}>원본 데이터 보기</summary>
-            <pre
-              style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, color: '#6b7280' }}
-            >
-              {raw}
-            </pre>
-          </details>
+          <pre
+            style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, color: '#6b7280' }}
+          >
+            {raw}
+          </pre>
         )}
       </div>
     </main>

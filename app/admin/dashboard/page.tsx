@@ -22,6 +22,14 @@ type GasRow = {
   resident?: { id: string; name: string; unit: string | null } | null;
 };
 
+type NotificationRow = {
+  id: string;
+  type: string;
+  done: boolean;
+  created_at: string;
+  payload: any;
+};
+
 export default function DashboardPage() {
   const supabase = supabaseBrowser();
   const [loading, setLoading] = useState(true);
@@ -31,6 +39,7 @@ export default function DashboardPage() {
   const [residentAll, setResidentAll] = useState<{ id: string; status: string | null; unit: string | null }[]>([]);
   const [issues, setIssues] = useState<ResidentIssue[]>([]);
   const [gasRows, setGasRows] = useState<GasRow[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -135,6 +144,15 @@ export default function DashboardPage() {
         setGasRows([]);
       }
 
+      const { data: notifRows, error: notifErr } = await supabase
+        .from('notifications')
+        .select('id,type,done,created_at,payload')
+        .eq('done', false)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (notifErr && !message) setMessage(notifErr.message);
+      if (notifRows) setNotifications(notifRows as NotificationRow[]);
+
       setLoading(false);
     };
 
@@ -185,6 +203,60 @@ export default function DashboardPage() {
         <StatCard label="가스 검침 (입주자/기록)" value={`${stats.residents}/${stats.gas}`} />
         <StatCard label="차량 등록 수" value={stats.vehicles.toLocaleString()} />
         <StatCard label="QR 발급 수" value={stats.qr.toLocaleString()} />
+      </section>
+
+      <section className="card" style={{ padding: 16, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>알림</h2>
+          <span style={{ fontSize: 12, color: '#6b7280' }}>
+            미처리 {notifications.filter((n) => !n.done).length}건 / 최근 10건
+          </span>
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {notifications.filter((n) => !n.done).length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>알림이 없습니다.</div>}
+          {notifications.filter((n) => !n.done).map((n) => (
+            <div
+              key={n.id}
+              style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+                padding: '10px 12px',
+                background: n.done ? '#f8fafc' : '#fff',
+                display: 'grid',
+                gap: 6,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 700 }}>{n.type}</div>
+                <span
+                  style={{
+                    fontSize: 12,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: n.done ? '#e0f2fe' : '#fee2e2',
+                    color: n.done ? '#0369a1' : '#b91c1c',
+                  }}
+                >
+                  {n.done ? '완료' : '미처리'}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280' }}>{new Date(n.created_at).toLocaleString('ko-KR')}</div>
+              <pre
+                style={{
+                  background: '#f8fafc',
+                  borderRadius: 8,
+                  padding: 8,
+                  fontSize: 12,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  margin: 0,
+                }}
+              >
+                {JSON.stringify(n.payload, null, 2)}
+              </pre>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="card" style={{ padding: 16, display: 'grid', gap: 10 }}>

@@ -21,26 +21,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
   }
 
-  const body = await req.json();
-  const payload = {
-    email: body.email ?? null,
-    phone: body.phone ?? null,
-    unit: body.unit ?? null,
-    vehicle_plate: body.vehicle_plate ?? null,
-    vehicle_type: body.vehicle_type ?? null,
-    user_id: session.user.id,
-  };
+  // 관리자 여부 확인
+  const { data: adminRow } = await supabase
+    .from('admins')
+    .select('role')
+    .eq('user_id', session.user.id)
+    .maybeSingle();
+  if (!adminRow) {
+    return NextResponse.json({ error: '관리자만 처리할 수 있습니다.' }, { status: 403 });
+  }
 
-  const { error } = await supabase.from('notifications').insert({
-    type: 'resident_change',
-    recipient: 'admins', // 관리자들이 확인할 수 있도록 고정
-    payload,
-    done: false,
-  });
+  const { id } = await req.json();
+  if (!id) {
+    return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 });
+  }
 
+  const { error } = await supabase.from('notifications').update({ done: true }).eq('id', id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
   return NextResponse.json({ ok: true });
 }
+

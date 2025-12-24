@@ -44,21 +44,21 @@ export default function UserDashboardPage() {
         return;
       }
 
-      // 관리자는 관리자 대시보드로 우선 이동
+      // 관리자인 경우 관리자 대시보드로 리다이렉트
       const { data: admin } = await supabase.from('admins').select('user_id').eq('user_id', session.user.id).maybeSingle();
       if (admin?.user_id) {
         router.replace('/admin/dashboard');
         return;
       }
 
-      await loadResident(session.user.id);
+      await loadResident(session.user.id, session.user.email);
       await loadGasReadings(session.user.id);
       setLoading(false);
     };
     init();
   }, [router, supabase]);
 
-  const loadResident = async (userId: string) => {
+  const loadResident = async (userId: string, sessionEmail?: string | null) => {
     const { data } = await supabase
       .from('resident')
       .select(
@@ -79,6 +79,8 @@ export default function UserDashboardPage() {
       `
       )
       .eq('id', userId)
+      .order('created_at', { referencedTable: 'qr_tokens', ascending: false })
+      .limit(1, { referencedTable: 'qr_tokens' })
       .maybeSingle();
 
     if (data) {
@@ -96,6 +98,28 @@ export default function UserDashboardPage() {
         vehicle_plate: data.vehicle_plate ?? '',
         vehicle_type: (data.vehicle_type as 'ice' | 'ev') ?? 'ice',
       });
+    } else {
+      // resident 레코드가 없으면 기본 정보로 표시
+      const fallback = {
+        id: userId,
+        name: sessionEmail ?? '회원',
+        email: sessionEmail ?? '',
+        phone: '',
+        unit: '',
+        vehicle_plate: '',
+        vehicle_type: 'ice' as 'ice' | 'ev',
+        status: 'unknown',
+        qr_tokens: [] as any[],
+      };
+      setResident(fallback as any);
+      setQrImage(null);
+      setChangeForm({
+        email: fallback.email,
+        phone: fallback.phone,
+        unit: fallback.unit,
+        vehicle_plate: fallback.vehicle_plate,
+        vehicle_type: fallback.vehicle_type,
+      });
     }
   };
 
@@ -112,7 +136,7 @@ export default function UserDashboardPage() {
   const handleGasSubmit = async () => {
     setMessage(null);
     if (!gasForm.readAt) {
-      setMessage('검침일시를 입력해 주세요.');
+      setMessage('검침 일시를 입력해주세요.');
       return;
     }
     const { data: sessionData } = await supabase.auth.getSession();
@@ -130,14 +154,14 @@ export default function UserDashboardPage() {
       const resp = await fetch('/api/gas/upload', { method: 'POST', body: fd });
       const data = await resp.json();
       if (!resp.ok) {
-        setMessage(data?.error || '이미지 업로드에 실패했습니다.');
+        setMessage(data?.error || '업로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
         return;
       }
-      setMessage('검침이 등록되었습니다. (이미지 OCR 시도)');
+      setMessage('제출되었습니다. (이미지 업로드 시 1주 보관/OCR 시도)');
     } else {
       const readingValue = Number(gasForm.reading);
       if (!readingValue) {
-        setMessage('검침값을 숫자로 입력해 주세요.');
+        setMessage('검침값을 입력해주세요.');
         return;
       }
       const resp = await fetch('/api/gas/submit', {
@@ -152,10 +176,10 @@ export default function UserDashboardPage() {
       });
       const data = await resp.json();
       if (!resp.ok) {
-        setMessage(data?.error || '검침 등록에 실패했습니다.');
+        setMessage(data?.error || '제출에 실패했습니다. 잠시 후 다시 시도해주세요.');
         return;
       }
-      setMessage('검침이 등록되었습니다.');
+      setMessage('제출되었습니다.');
     }
     setGasForm({ reading: '', readAt: '', note: '' });
     setFile(null);
@@ -181,10 +205,10 @@ export default function UserDashboardPage() {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      setMessage(data?.error || '변경 요청에 실패했습니다.');
+      setMessage(data?.error || '요청에 실패했습니다. 잠시 후 다시 시도해주세요.');
       return;
     }
-    setMessage('변경 요청이 접수되었습니다. 관리자가 확인 후 반영합니다.');
+    setMessage('수정 요청이 등록되었습니다. 관리자 확인 후 반영됩니다.');
   };
 
   const formatDate = (value: string | null) => {
@@ -215,8 +239,24 @@ export default function UserDashboardPage() {
   return (
     <main style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px', display: 'grid', gap: 16 }}>
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>내 입주자 대시보드</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
+          {resident?.unit ? `${resident.unit} 입주자 대시보드` : '내 입주자 대시보드'}
+        </h1>
         <p style={{ color: '#4b5563' }}>내 QR과 가스 검침을 관리할 수 있습니다.</p>
+        <button
+          className="btn btn-secondary"
+          onClick={async () => {
+            const { data } = await supabase.auth.getSession();
+            const userId = data.session?.user.id;
+            if (userId) {
+              await loadResident(userId, data.session?.user.email);
+              await loadGasReadings(userId);
+            }
+          }}
+          style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10 }}
+        >
+          정보 새로고침
+        </button>
       </div>
 
       <section className="card" style={{ padding: 16, display: 'grid', gap: 12 }}>
@@ -232,7 +272,7 @@ export default function UserDashboardPage() {
           alignItems: 'start',
         }}
       >
-        {/* 왼쪽: 가스 검침 입력/목록 */}
+        {/* 가스 검침 입력/이력 */}
         <div className="card" style={{ padding: 16, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>가스 검침 입력</h2>
@@ -260,12 +300,7 @@ export default function UserDashboardPage() {
               style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', minHeight: 60 }}
             />
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                type="file"
-                accept="image/*"
-                style={{ flex: 1 }}
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
+              <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
               <span style={{ fontSize: 12, color: '#6b7280' }}>이미지 업로드 시 1주 보관(OCR 시도)</span>
             </div>
             <button className="btn btn-primary" onClick={handleGasSubmit} style={{ padding: '12px', borderRadius: 10 }}>
@@ -274,6 +309,7 @@ export default function UserDashboardPage() {
           </div>
 
           <div style={{ display: 'grid', gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>등록된 검침</h3>
             {gasReadings.length === 0 && <div style={{ color: '#6b7280' }}>등록된 검침이 없습니다.</div>}
             {gasReadings.map((r) => (
               <div
@@ -296,41 +332,35 @@ export default function UserDashboardPage() {
           </div>
         </div>
 
-        {/* 오른쪽: 차량/QR 정보 */}
+        {/* 내 정보 / QR */}
         <div className="card" style={{ padding: 16, display: 'grid', gap: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>차량 정보 & QR</h2>
           {resident ? (
             <div style={{ display: 'grid', gap: 8 }}>
               <div>이름: {resident.name}</div>
               <div>이메일: {resident.email ?? '-'}</div>
-              <div>전화번호: {resident.phone}</div>
+              <div>전화번호: {resident.phone ?? '-'}</div>
               <div>동/호: {resident.unit ?? '-'}</div>
               <div>
                 차량번호: {resident.vehicle_plate ?? '-'}{' '}
-                {resident.vehicle_type === 'ev'
-                  ? '(전기차)'
-                  : resident.vehicle_type === 'ice'
-                  ? '(내연기관)'
-                  : ''}
+                {resident.vehicle_type === 'ev' ? '(전기차)' : resident.vehicle_type === 'ice' ? '(내연기관)' : ''}
               </div>
               <div>상태: {resident.status ?? '-'}</div>
               {qrImage ? (
                 <div style={{ marginTop: 8 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>QR 이미지</div>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>QR 코드</div>
                   <img
                     src={qrImage}
-                    alt="QR 코드"
+                    alt="QR"
                     style={{ width: 200, height: 200, objectFit: 'contain', border: '1px solid #e5e7eb', borderRadius: 12 }}
                   />
                 </div>
               ) : (
-                <div style={{ color: '#b91c1c' }}>
-                  QR 발급 기록이 없습니다. 관리자가 QR을 발급해 주면 이곳에 표시됩니다.
-                </div>
+                <div style={{ color: '#b91c1c' }}>QR가 아직 생성되지 않았습니다. 관리자에게 요청해주세요.</div>
               )}
             </div>
           ) : (
-            <div style={{ color: '#b91c1c' }}>입주자 정보를 찾지 못했습니다.</div>
+            <div style={{ color: '#b91c1c' }}>입주자 정보를 불러오지 못했습니다.</div>
           )}
 
           <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
@@ -384,7 +414,7 @@ export default function UserDashboardPage() {
               </label>
             </div>
             <button className="btn btn-primary" onClick={handleChangeRequest} style={{ padding: '12px', borderRadius: 10 }}>
-              변경 요청 보내기
+              정보 수정 요청
             </button>
           </div>
         </div>

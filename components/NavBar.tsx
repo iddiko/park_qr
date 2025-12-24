@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -89,7 +89,7 @@ export default function NavBar() {
       : role === 'manager'
       ? '매니저'
       : role === 'member'
-      ? '회원'
+      ? '일반회원'
       : '게스트';
 
   const visibleMenus = MENU_ITEMS.filter((item) => {
@@ -99,7 +99,7 @@ export default function NavBar() {
   });
 
   const rightGuestLinks = [
-    { href: '/resident/register', label: '회원등록' },
+    { href: '/resident/register', label: '회원가입' },
     { href: '/login', label: '로그인' },
   ];
 
@@ -153,7 +153,7 @@ export default function NavBar() {
               cursor: 'pointer',
             }}
           >
-            ☰
+            메뉴
           </button>
         )}
 
@@ -221,6 +221,7 @@ export default function NavBar() {
               borderRadius: 10,
               border: '1px solid #e5e7eb',
               background: '#f8fafc',
+              flexWrap: 'wrap',
             }}
           >
             <span style={{ fontSize: 13, color: '#6b7280' }}>{sessionEmail} 님 환영합니다.</span>
@@ -235,7 +236,7 @@ export default function NavBar() {
               }}
             />
             <Link
-              href="/notifications"
+              href="/admin/notifications"
               style={{
                 padding: '4px 8px',
                 borderRadius: 8,

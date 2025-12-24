@@ -17,6 +17,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'scan', label: 'Scan', href: '/scan', roles: ['guest', 'member', 'manager', 'admin', 'super_admin'] },
   { id: 'resident-manage', label: '입주자 관리', href: '/admin/history', roles: ['member', 'manager', 'admin', 'super_admin'] },
   { id: 'logs', label: '로그', href: '/admin/logs', roles: ['member', 'manager', 'admin', 'super_admin'] },
+  { id: 'notifications', label: '알림', href: '/admin/notifications', roles: ['admin', 'super_admin'] },
   { id: 'ads', label: '광고관리', href: '/admin/ads', roles: ['member', 'manager', 'admin', 'super_admin'] },
   { id: 'menu-config', label: '메뉴 설정', href: '/admin/menu', roles: ['member', 'manager', 'admin', 'super_admin'] },
 ];
